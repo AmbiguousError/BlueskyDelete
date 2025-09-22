@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bluesky Content Deleter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <style>
+        body {
+            background-color: #16191c;
+        }
+        .log-box {
+            height: 400px;
+            background-color: #000;
+            border: 1px solid #444;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            padding: 10px;
+            overflow-y: scroll;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8 col-md-10">
+                <div class="card">
+                    <div class="card-body p-4">
+                        <h2 class="card-title text-center mb-3">Bluesky Content Deleter</h2>
+                        <p class="text-center text-body-secondary">A tool to permanently delete your posts and/or likes.</p>
+                        <hr>
+                        
+                        <div class="alert alert-danger text-center" role="alert">
+                            <h4 class="alert-heading">⚠️ Action Required!</h4>
+                            <p>This action is **PERMANENT** and **CANNOT BE UNDONE**. Please be absolutely sure before you proceed. This tool runs entirely in your browser and your credentials are not saved.</p>
+                        </div>
+
+                        <form id="deleteForm">
+                            <div class="mb-3">
+                                <label for="handle" class="form-label">Bluesky Handle</label>
+                                <input type="text" class="form-control" id="handle" placeholder="your-name.bsky.social" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="appPassword" class="form-label">App Password</label>
+                                <input type="password" class="form-control" id="appPassword" placeholder="xxxx-xxxx-xxxx-xxxx" required>
+                                <div class="form-text">Generate this from Bluesky Settings → App Passwords. <strong>Do not use your main password.</strong></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <p class="form-label">Content to Delete:</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="deletePosts" checked>
+                                    <label class="form-check-label" for="deletePosts">
+                                        Delete All Posts & Replies
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="deleteLikes" checked>
+                                    <label class="form-check-label" for="deleteLikes">
+                                        Delete All Likes
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" id="submitButton" class="btn btn-danger btn-lg">
+                                    <span id="buttonSpinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                                    Start Permanent Deletion
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="mt-4">
+                            <h5 class="text-body-secondary">Log Output</h5>
+                            <pre id="logOutput" class="log-box">Waiting to start...</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import the Bluesky API agent from a CDN
+        import { BskyAgent } from 'https://esm.sh/@atproto/api';
+
+        // --- DOM Elements ---
+        const form = document.getElementById('deleteForm');
+        const handleInput = document.getElementById('handle');
+        const passwordInput = document.getElementById('appPassword');
+        const deletePostsCheckbox = document.getElementById('deletePosts');
+        const deleteLikesCheckbox = document.getElementById('deleteLikes');
+        const submitButton = document.getElementById('submitButton');
+        const buttonSpinner = document.getElementById('buttonSpinner');
+        const logOutput = document.getElementById('logOutput');
+        
+        const DELAY_MS = 500; // 0.5 second delay between deletes to respect rate limits
+
+        // --- Helper Functions ---
+        const log = (message) => {
+            console.log(message);
+            logOutput.textContent += message + '\n';
+            logOutput.scrollTop = logOutput.scrollHeight; // Auto-scroll
+        };
+        
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        const setUIState = (isBusy) => {
+            submitButton.disabled = isBusy;
+            handleInput.disabled = isBusy;
+            passwordInput.disabled = isBusy;
+            buttonSpinner.style.display = isBusy ? 'inline-block' : 'none';
+        };
+
+        // --- Core Deletion Logic ---
+        async function deleteAllRecords(agent, collection, typeName) {
+            log(`\n--- Starting to delete all ${typeName} ---`);
+            const repo = agent.session.did;
+            let cursor = null;
+            let totalDeleted = 0;
+
+            try {
+                while (true) {
+                    log(`Fetching a batch of ${typeName}...`);
+                    const response = await agent.com.atproto.repo.listRecords({
+                        repo,
+                        collection,
+                        limit: 100,
+                        cursor,
+                    });
+
+                    if (response.data.records.length === 0) {
+                        log(`No more ${typeName} found to delete.`);
+                        break;
+                    }
+
+                    log(`Found ${response.data.records.length} ${typeName} in this batch. Deleting now...`);
+
+                    for (const record of response.data.records) {
+                        try {
+                            const rkey = record.uri.split('/').pop();
+                            await agent.com.atproto.repo.deleteRecord({ repo, collection, rkey });
+                            totalDeleted++;
+                            log(`(${totalDeleted}) Deleted ${typeName}: ${rkey}`);
+                        } catch (e) {
+                            log(`Could not delete record ${record.uri}. Reason: ${e.message}`);
+                        }
+                        await sleep(DELAY_MS);
+                    }
+
+                    cursor = response.data.cursor;
+                    if (!cursor) {
+                        break; // No more pages
+                    }
+                }
+                log(`--- Finished deleting all ${typeName}. Total: ${totalDeleted} ---`);
+            } catch (error) {
+                log(`An error occurred while fetching ${typeName}: ${error.message}`);
+            }
+        }
+        
+        // --- Form Submission Handler ---
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            logOutput.textContent = ''; // Clear log
+
+            const handle = handleInput.value;
+            const password = passwordInput.value;
+            const shouldDeletePosts = deletePostsCheckbox.checked;
+            const shouldDeleteLikes = deleteLikesCheckbox.checked;
+
+            if (!handle || !password) {
+                log('Please provide both your handle and app password.');
+                return;
+            }
+            if (!shouldDeletePosts && !shouldDeleteLikes) {
+                log('Please select at least one type of content to delete.');
+                return;
+            }
+
+            const confirmed = confirm("⚠️ ARE YOU ABSOLUTELY SURE?\n\nThis action is irreversible and will permanently delete the selected content from your account.");
+            if (!confirmed) {
+                log('Deletion cancelled by user.');
+                return;
+            }
+
+            setUIState(true);
+
+            const agent = new BskyAgent({ service: 'https://bsky.social' });
+
+            try {
+                log('Attempting to log in...');
+                await agent.login({ identifier: handle, password });
+                log(`✅ Successfully logged in as ${agent.session.handle}`);
+
+                if (shouldDeletePosts) {
+                    await deleteAllRecords(agent, 'app.bsky.feed.post', 'posts');
+                }
+                if (shouldDeleteLikes) {
+                    await deleteAllRecords(agent, 'app.bsky.feed.like', 'likes');
+                }
+                
+                log('\n🎉 All tasks completed!');
+
+            } catch (error) {
+                log(`\n❌ An error occurred: ${error.message}`);
+                log('Please check your handle and app password and try again.');
+            } finally {
+                setUIState(false);
+            }
+        });
+    </script>
+</body>
+</html>
