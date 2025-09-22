@@ -35,8 +35,7 @@ For security, this tool uses an App Password, not your main password.
 
 #### Step 2: Download and Open the Tool
 
-1.  Download the `bluesky-deleter.html` file to your computer.
-2.  Open the file in a modern web browser (like Google Chrome, Mozilla Firefox, or Microsoft Edge).
+1.  Open the link https://ambiguouserror.github.io/BlueskyDelete/ in a modern web browser (like Google Chrome, Mozilla Firefox, or Microsoft Edge).
 
 #### Step 3: Run the Deletion Process
 
@@ -46,9 +45,6 @@ For security, this tool uses an App Password, not your main password.
 4.  Click the **Start Permanent Deletion** button.
 5.  A confirmation pop-up will appear. You must confirm to proceed.
 6.  The process will begin, and you can monitor its progress in the **Log Output** box. Please be patient, as this can take a long time if you have a lot of content.
-
-![image](https://i.imgur.com/Kz3ZpL1.png)
-*(Example screenshot of the user interface)*
 
 ## 🔒 Security
 
