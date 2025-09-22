@@ -6,21 +6,8 @@
     <title>Bluesky Content Deleter</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <style>
-        body {
-            background-color: #16191c;
-        }
-        .log-box {
-            height: 400px;
-            background-color: #000;
-            border: 1px solid #444;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 0.85rem;
-            padding: 10px;
-            overflow-y: scroll;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
+        body { background-color: #16191c; }
+        .log-box { height: 400px; background-color: #000; border: 1px solid #444; border-radius: 5px; font-family: monospace; font-size: 0.85rem; padding: 10px; overflow-y: scroll; white-space: pre-wrap; word-wrap: break-word; }
     </style>
 </head>
 <body>
@@ -30,12 +17,12 @@
                 <div class="card">
                     <div class="card-body p-4">
                         <h2 class="card-title text-center mb-3">Bluesky Content Deleter</h2>
-                        <p class="text-center text-body-secondary">A tool to permanently delete your posts and/or likes.</p>
+                        <p class="text-center text-body-secondary">A tool to permanently delete your posts, reposts, and/or likes.</p>
                         <hr>
                         
                         <div class="alert alert-danger text-center" role="alert">
                             <h4 class="alert-heading">⚠️ Action Required!</h4>
-                            <p>This action is **PERMANENT** and **CANNOT BE UNDONE**. Please be absolutely sure before you proceed. This tool runs entirely in your browser and your credentials are not saved.</p>
+                            <p>This action is **PERMANENT** and **CANNOT BE UNDONE**. Please be absolutely sure before you proceed.</p>
                         </div>
 
                         <form id="deleteForm">
@@ -53,15 +40,15 @@
                                 <p class="form-label">Content to Delete:</p>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="deletePosts" checked>
-                                    <label class="form-check-label" for="deletePosts">
-                                        Delete All Posts & Replies
-                                    </label>
+                                    <label class="form-check-label" for="deletePosts">Delete All Posts & Replies</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="deleteReposts" checked>
+                                    <label class="form-check-label" for="deleteReposts">Delete All Reposts</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="deleteLikes" checked>
-                                    <label class="form-check-label" for="deleteLikes">
-                                        Delete All Likes
-                                    </label>
+                                    <label class="form-check-label" for="deleteLikes">Delete All Likes</label>
                                 </div>
                             </div>
                             
@@ -84,26 +71,23 @@
     </div>
 
     <script type="module">
-        // Import the Bluesky API agent from a CDN
         import { BskyAgent } from 'https://esm.sh/@atproto/api';
 
-        // --- DOM Elements ---
         const form = document.getElementById('deleteForm');
         const handleInput = document.getElementById('handle');
         const passwordInput = document.getElementById('appPassword');
         const deletePostsCheckbox = document.getElementById('deletePosts');
+        const deleteRepostsCheckbox = document.getElementById('deleteReposts'); // NEW
         const deleteLikesCheckbox = document.getElementById('deleteLikes');
         const submitButton = document.getElementById('submitButton');
         const buttonSpinner = document.getElementById('buttonSpinner');
         const logOutput = document.getElementById('logOutput');
         
-        const DELAY_MS = 500; // 0.5 second delay between deletes to respect rate limits
+        const DELAY_MS = 500;
 
-        // --- Helper Functions ---
         const log = (message) => {
-            console.log(message);
             logOutput.textContent += message + '\n';
-            logOutput.scrollTop = logOutput.scrollHeight; // Auto-scroll
+            logOutput.scrollTop = logOutput.scrollHeight;
         };
         
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -115,7 +99,6 @@
             buttonSpinner.style.display = isBusy ? 'inline-block' : 'none';
         };
 
-        // --- Core Deletion Logic ---
         async function deleteAllRecords(agent, collection, typeName) {
             log(`\n--- Starting to delete all ${typeName} ---`);
             const repo = agent.session.did;
@@ -125,20 +108,12 @@
             try {
                 while (true) {
                     log(`Fetching a batch of ${typeName}...`);
-                    const response = await agent.com.atproto.repo.listRecords({
-                        repo,
-                        collection,
-                        limit: 100,
-                        cursor,
-                    });
-
+                    const response = await agent.com.atproto.repo.listRecords({ repo, collection, limit: 100, cursor });
                     if (response.data.records.length === 0) {
                         log(`No more ${typeName} found to delete.`);
                         break;
                     }
-
                     log(`Found ${response.data.records.length} ${typeName} in this batch. Deleting now...`);
-
                     for (const record of response.data.records) {
                         try {
                             const rkey = record.uri.split('/').pop();
@@ -150,11 +125,8 @@
                         }
                         await sleep(DELAY_MS);
                     }
-
                     cursor = response.data.cursor;
-                    if (!cursor) {
-                        break; // No more pages
-                    }
+                    if (!cursor) break;
                 }
                 log(`--- Finished deleting all ${typeName}. Total: ${totalDeleted} ---`);
             } catch (error) {
@@ -162,21 +134,20 @@
             }
         }
         
-        // --- Form Submission Handler ---
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
-            logOutput.textContent = ''; // Clear log
-
+            logOutput.textContent = '';
             const handle = handleInput.value;
             const password = passwordInput.value;
             const shouldDeletePosts = deletePostsCheckbox.checked;
+            const shouldDeleteReposts = deleteRepostsCheckbox.checked; // NEW
             const shouldDeleteLikes = deleteLikesCheckbox.checked;
 
             if (!handle || !password) {
                 log('Please provide both your handle and app password.');
                 return;
             }
-            if (!shouldDeletePosts && !shouldDeleteLikes) {
+            if (!shouldDeletePosts && !shouldDeleteLikes && !shouldDeleteReposts) { // NEW
                 log('Please select at least one type of content to delete.');
                 return;
             }
@@ -188,9 +159,7 @@
             }
 
             setUIState(true);
-
             const agent = new BskyAgent({ service: 'https://bsky.social' });
-
             try {
                 log('Attempting to log in...');
                 await agent.login({ identifier: handle, password });
@@ -199,12 +168,14 @@
                 if (shouldDeletePosts) {
                     await deleteAllRecords(agent, 'app.bsky.feed.post', 'posts');
                 }
+                if (shouldDeleteReposts) { // NEW
+                    await deleteAllRecords(agent, 'app.bsky.feed.repost', 'reposts');
+                }
                 if (shouldDeleteLikes) {
                     await deleteAllRecords(agent, 'app.bsky.feed.like', 'likes');
                 }
                 
                 log('\n🎉 All tasks completed!');
-
             } catch (error) {
                 log(`\n❌ An error occurred: ${error.message}`);
                 log('Please check your handle and app password and try again.');
